@@ -3,10 +3,10 @@ const app = express();
 require("dotenv").config();
 const cors = require("cors");
 const cookieParser = require("cookie-parser");
-const { MongoClient, ServerApiVersion } = require("mongodb");
+const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 const jwt = require("jsonwebtoken");
 const morgan = require("morgan");
-const port = process.env.PORT || 8000;
+const port = process.env.PORT || 5000;
 
 // middleware
 const corsOptions = {
@@ -44,6 +44,7 @@ const client = new MongoClient(process.env.DB_URI, {
 async function run() {
   try {
     const usersCollection = client.db("vehiQuest").collection("users");
+    const vehiclesCollection = client.db("vehiQuest").collection("vehicles");
 
     // auth related api
     app.post("/jwt", async (req, res) => {
@@ -96,6 +97,36 @@ async function run() {
       res.send(result);
     });
 
+    // ****************New Data here *************
+
+    // Get All Vehicle
+    app.get("/vehicles", async (req, res) => {
+      const result = await vehiclesCollection.find().toArray();
+      res.send(result);
+    });
+    // Get Single Vehicle
+    app.get("/vehicle/:id", async (req, res) => {
+      const id = req.params.id;
+      const result = await vehiclesCollection.findOne({
+        _id: new ObjectId(id),
+      });
+      res.send(result);
+    });
+
+    // Save vehicle in the database
+    app.post("/vehicles", verifyToken, async (req, res) => {
+      const vehicle = req.body;
+      const result = await vehiclesCollection.insertOne(vehicle);
+      res.send(result);
+    });
+
+    //Save Vehicle for the host
+    app.get('/rooms/:email',async(req,res)=>{
+      const email= req.params.email;
+      const result = await vehiclesCollection.find().toArray();
+      res.send(result);
+    }) 
+
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
     console.log(
@@ -113,5 +144,5 @@ app.get("/", (req, res) => {
 });
 
 app.listen(port, () => {
-  console.log(`VehiQuest is running on port ${port}`);
+  console.log(`VehiQuest is Driving on port ${port}`);
 });
