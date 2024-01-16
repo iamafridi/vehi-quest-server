@@ -153,7 +153,7 @@ async function run() {
       res.send({ clientSecret: client_secret });
     });
 
-    // **Updateing Here
+    // **Updating Here
     // Save Booking Info in Booking Collection
 
     app.post("/bookings", verifyToken, async (req, res) => {
@@ -174,6 +174,24 @@ async function run() {
         },
       };
       const result = await vehiclesCollection.updateOne(query, updateDoc);
+      res.send(result);
+    });
+
+    // Getting All the bookings guest have booked
+    app.get("/bookings", verifyToken, async (req, res) => {
+      const email = req.query.email;
+      if (!email) return res.send([]);
+      const query = { "guest.email": email };
+      const result = await bookingsCollection.find(query).toArray();
+      res.send(result);
+    });
+
+    // Getting All the bookings Host have booked
+    app.get("/bookings/host", verifyToken, async (req, res) => {
+      const email = req.query.email;
+      if (!email) return res.send([]);
+      const query = { host: email };
+      const result = await bookingsCollection.find(query).toArray();
       res.send(result);
     });
 
