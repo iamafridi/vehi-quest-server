@@ -46,6 +46,7 @@ async function run() {
   try {
     const usersCollection = client.db("vehiQuest").collection("users");
     const vehiclesCollection = client.db("vehiQuest").collection("vehicles");
+    const bookingsCollection = client.db("vehiQuest").collection("bookings");
 
     // auth related api
     app.post("/jwt", async (req, res) => {
@@ -150,6 +151,30 @@ async function run() {
         payment_method_types: ["card"],
       });
       res.send({ clientSecret: client_secret });
+    });
+
+    // **Updateing Here
+    // Save Booking Info in Booking Collection
+
+    app.post("/bookings", verifyToken, async (req, res) => {
+      const booking = req.body;
+      const result = await bookingsCollection.insertOne(booking);
+      // TODO: email here
+      res.send(result);
+    });
+
+    // Update Vehicle Booking Status
+    app.patch("/rooms/status/:id", async (req, res) => {
+      const id = req.params.id;
+      const status = req.body.status;
+      const query = { _id: new ObjectId(id) };
+      const updateDoc = {
+        $set: {
+          booked: status,
+        },
+      };
+      const result = await vehiclesCollection.updateOne(query, updateDoc);
+      res.send(result);
     });
 
     // Send a ping to confirm a successful connection
