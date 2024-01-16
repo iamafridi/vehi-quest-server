@@ -48,6 +48,26 @@ async function run() {
     const vehiclesCollection = client.db("vehiQuest").collection("vehicles");
     const bookingsCollection = client.db("vehiQuest").collection("bookings");
 
+    // *** Role Verification MiddleWares ***
+    // For Admin
+    const verifyAdmin = async (req, res, next) => {
+      const user = req.user;
+      const query = { email: user?.email };
+      const result = await usersCollection.findOne(query);
+      if (!result || result?.role !== "admin")
+        return res.status(401).send({ message: "unauthorized access" });
+      next();
+    };
+    // For Hosts
+    const verifyHost = async (req, res, next) => {
+      const user = req.user;
+      const query = { email: user?.email };
+      const result = await usersCollection.findOne(query);
+      if (!result || result?.role !== "host")
+        return res.status(401).send({ message: "unauthorized access" });
+      next();
+    };
+
     // auth related api
     app.post("/jwt", async (req, res) => {
       const user = req.body;
@@ -90,12 +110,13 @@ async function run() {
       console.log("User found?----->", isExist);
       if (isExist) {
         if (user?.status === "Requested") {
-          const result = await usersCollection.updateOne(query, {
-            $set: {
-              user,
+          const result = await usersCollection.updateOne(
+            query,
+            {
+              $set: user,
             },
-            options,
-          });
+            options
+          );
           return res.send(result);
         } else {
           return res.send(isExist);
