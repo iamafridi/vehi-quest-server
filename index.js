@@ -35,6 +35,16 @@ const verifyToken = async (req, res, next) => {
     next();
   });
 };
+const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.7grn8zj.mongodb.net/?retryWrites=true&w=majority`;
+
+// Create a MongoClient with a MongoClientOptions object to set the Stable API version
+const client = new MongoClient(uri, {
+  serverApi: {
+    version: ServerApiVersion.v1,
+    strict: true,
+    deprecationErrors: true,
+  },
+});
 
 // Send Email To the User
 
@@ -102,7 +112,9 @@ async function run() {
     };
 
     // auth related api
-    app.post("/jwt", async (req, res) => {
+    // Change this line in your backend (around line 95)
+    app.put("/jwt", async (req, res) => {
+      // Changed from POST to PUT
       const user = req.body;
       console.log("I need a new jwt", user);
       const token = jwt.sign(user, process.env.ACCESS_TOKEN_SECRET, {
@@ -116,6 +128,20 @@ async function run() {
         })
         .send({ success: true });
     });
+    // app.post("/jwt", async (req, res) => {
+    //   const user = req.body;
+    //   console.log("I need a new jwt", user);
+    //   const token = jwt.sign(user, process.env.ACCESS_TOKEN_SECRET, {
+    //     expiresIn: "365d",
+    //   });
+    //   res
+    //     .cookie("token", token, {
+    //       httpOnly: true,
+    //       secure: process.env.NODE_ENV === "production",
+    //       sameSite: process.env.NODE_ENV === "production" ? "none" : "strict",
+    //     })
+    //     .send({ success: true });
+    // });
 
     // Logout
     app.get("/logout", async (req, res) => {
@@ -172,14 +198,14 @@ async function run() {
       const result = await vehiclesCollection.find().toArray();
       res.send(result);
     });
-//Save Vehicle for the ***host***
-app.get("/rooms/:email", verifyToken, verifyHost, async (req, res) => {
-  const email = req.params.email;
-  const result = await vehiclesCollection
-    .find({ "host.email": email })
-    .toArray();
-  res.send(result);
-});
+    //Save Vehicle for the ***host***
+    app.get("/rooms/:email", verifyToken, verifyHost, async (req, res) => {
+      const email = req.params.email;
+      const result = await vehiclesCollection
+        .find({ "host.email": email })
+        .toArray();
+      res.send(result);
+    });
     // Get Single Vehicle
     app.get("/vehicle/:id", async (req, res) => {
       const id = req.params.id;
@@ -196,32 +222,30 @@ app.get("/rooms/:email", verifyToken, verifyHost, async (req, res) => {
       res.send(result);
     });
 
-  // Update A Vehicle
-  app.put("/vehicles/:id", verifyToken, async (req, res) => {
-    const vehicle = req.body;
-    console.log(vehicle);
+    // Update A Vehicle
+    app.put("/vehicles/:id", verifyToken, async (req, res) => {
+      const vehicle = req.body;
+      console.log(vehicle);
 
-    const filter = { _id: new ObjectId(req.params.id) };
-    const options = { upsert: true };
-    const updateDoc = {
-      $set: vehicle,
-    };
-    const result = await vehiclesCollection.updateOne(
-      filter,
-      updateDoc,
-      options
-    );
-    res.send(result);
-  });
-  // delete a vehicle
-  app.delete("/vehicles/:id", verifyToken, async (req, res) => {
-    const id = req.params.id;
-    const query = { _id: new ObjectId(id) };
-    const result = await vehiclesCollection.deleteOne(query);
-    res.send(result);
-  });
-    
-
+      const filter = { _id: new ObjectId(req.params.id) };
+      const options = { upsert: true };
+      const updateDoc = {
+        $set: vehicle,
+      };
+      const result = await vehiclesCollection.updateOne(
+        filter,
+        updateDoc,
+        options
+      );
+      res.send(result);
+    });
+    // delete a vehicle
+    app.delete("/vehicles/:id", verifyToken, async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) };
+      const result = await vehiclesCollection.deleteOne(query);
+      res.send(result);
+    });
 
     // ****Payment Intent****
     // Generating Payment Secret for stripe
@@ -243,23 +267,23 @@ app.get("/rooms/:email", verifyToken, verifyHost, async (req, res) => {
     app.post("/bookings", verifyToken, async (req, res) => {
       const booking = req.body;
       const result = await bookingsCollection.insertOne(booking);
-       // Send Email.....
-       if (result.insertedId) {
+      // Send Email.....
+      if (result.insertedId) {
         // To guest
         sendEmail(booking.guest.email, {
-          subject: 'Booking Successful!',
+          subject: "Booking Successful!",
           message: `Vehicle Ready, get your vehicle from strore, Your Transaction Id: ${booking.transactionId}`,
-        })
+        });
 
         // To Host
         sendEmail(booking.host, {
-          subject: 'Your Vehicle got booked!',
+          subject: "Your Vehicle got booked!",
           message: `Deliver you vehicle to the store. ${booking.guest.name} is on the way.....`,
-        })
+        });
       }
       res.send(result);
     });
-  
+
     // Update Vehicle Booking Status
     app.patch("/vehicles/status/:id", async (req, res) => {
       const id = req.params.id;
@@ -291,13 +315,13 @@ app.get("/rooms/:email", verifyToken, verifyHost, async (req, res) => {
       const result = await bookingsCollection.find(query).toArray();
       res.send(result);
     });
- // delete a booking
- app.delete("/bookings/:id", verifyToken, async (req, res) => {
-  const id = req.params.id;
-  const query = { _id: new ObjectId(id) };
-  const result = await bookingsCollection.deleteOne(query);
-  res.send(result);
-});
+    // delete a booking
+    app.delete("/bookings/:id", verifyToken, async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) };
+      const result = await bookingsCollection.deleteOne(query);
+      res.send(result);
+    });
 
     // Admin Stat Data
     app.get("/admin-stat", verifyToken, verifyAdmin, async (req, res) => {
@@ -364,7 +388,7 @@ app.get("/rooms/:email", verifyToken, verifyHost, async (req, res) => {
       res.send({
         totalSale,
         bookingCount: bookingsDetails.length,
-       vehicleCount,
+        vehicleCount,
         chartData,
         hostSince: timestamp,
       });
@@ -439,7 +463,6 @@ app.get("/rooms/:email", verifyToken, verifyHost, async (req, res) => {
     //   const result = await usersCollection.updateOne(query, updateDoc, options);
     //   res.send(result);
     // });
-    
 
     // // Get all vehicles
     // app.get("/vehicles", async (req, res) => {
@@ -454,8 +477,6 @@ app.get("/rooms/:email", verifyToken, verifyHost, async (req, res) => {
     //     .toArray();
     //   res.send(result);
     // });
-  
-   
 
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
