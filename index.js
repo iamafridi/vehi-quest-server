@@ -195,12 +195,43 @@ async function run() {
     });
 
     //Save Vehicle for the ***host***
-    app.get("/rooms/:email", verifyToken, verifyHost, async (req, res) => {
+    // app.get("/rooms/:email", verifyToken, verifyHost, async (req, res) => {
+    //   const email = req.params.email;
+    //   const result = await vehiclesCollection
+    //     .find({ "host.email": email })
+    //     .toArray();
+    //   res.send(result);
+    // });
+
+    // Get vehicles for host (this is the missing route)
+    // app.get("/vehicles/host/:email", verifyToken, async (req, res) => {
+    //   const email = req.params.email;
+    //   console.log("Fetching vehicles for host:", email); // Debug log
+    //   try {
+    //     const result = await vehiclesCollection
+    //       .find({ "host.email": email })
+    //       .toArray();
+    //     console.log("Found vehicles:", result.length); // Debug log
+    //     res.send(result);
+    //   } catch (error) {
+    //     console.error("Error fetching host vehicles:", error);
+    //     res.status(500).send({ message: "Error fetching vehicles" });
+    //   }
+    // });
+
+    app.get("/vehicles/:email", verifyToken, async (req, res) => {
       const email = req.params.email;
-      const result = await vehiclesCollection
-        .find({ "host.email": email })
-        .toArray();
-      res.send(result);
+      console.log("Fetching vehicles for host:", email);
+      try {
+        const result = await vehiclesCollection
+          .find({ "host.email": email })
+          .toArray();
+        console.log("Found vehicles:", result.length);
+        res.send(result);
+      } catch (error) {
+        console.error("Error fetching host vehicles:", error);
+        res.status(500).send({ message: "Error fetching vehicles" });
+      }
     });
 
     // Get Single Vehicle
@@ -218,32 +249,143 @@ async function run() {
       const result = await vehiclesCollection.insertOne(vehicle);
       res.send(result);
     });
+    // Add these routes to your backend after your existing vehicle routes
+
+    // Delete a vehicle (Enhanced with better error handling)
+    app.delete("/vehicles/:id", verifyToken, async (req, res) => {
+      try {
+        const id = req.params.id;
+        console.log("Deleting vehicle with ID:", id);
+
+        // Validate ObjectId format
+        if (!ObjectId.isValid(id)) {
+          return res.status(400).send({ message: "Invalid vehicle ID format" });
+        }
+
+        const query = { _id: new ObjectId(id) };
+
+        // Check if vehicle exists first
+        const existingVehicle = await vehiclesCollection.findOne(query);
+        if (!existingVehicle) {
+          return res.status(404).send({ message: "Vehicle not found" });
+        }
+
+        // Check if the user owns this vehicle (security check)
+        const userEmail = req.user?.email;
+        if (existingVehicle.host?.email !== userEmail) {
+          return res.status(403).send({
+            message: "Unauthorized: You can only delete your own vehicles",
+          });
+        }
+
+        const result = await vehiclesCollection.deleteOne(query);
+
+        if (result.deletedCount === 1) {
+          console.log("Vehicle deleted successfully");
+          res.send({
+            message: "Vehicle deleted successfully",
+            deletedCount: result.deletedCount,
+          });
+        } else {
+          res.status(404).send({ message: "Vehicle not found" });
+        }
+      } catch (error) {
+        console.error("Error deleting vehicle:", error);
+        res
+          .status(500)
+          .send({ message: "Internal server error while deleting vehicle" });
+      }
+    });
+
+    // Update a vehicle (Enhanced with better validation)
+    app.put("/vehicles/:id", verifyToken, async (req, res) => {
+      try {
+        const id = req.params.id;
+        const vehicleData = req.body;
+        console.log("Updating vehicle with ID:", id);
+
+        // Validate ObjectId format
+        if (!ObjectId.isValid(id)) {
+          return res.status(400).send({ message: "Invalid vehicle ID format" });
+        }
+
+        const filter = { _id: new ObjectId(id) };
+
+        // Check if vehicle exists first
+        const existingVehicle = await vehiclesCollection.findOne(filter);
+        if (!existingVehicle) {
+          return res.status(404).send({ message: "Vehicle not found" });
+        }
+
+        // Check if the user owns this vehicle (security check)
+        const userEmail = req.user?.email;
+        if (existingVehicle.host?.email !== userEmail) {
+          return res.status(403).send({
+            message: "Unauthorized: You can only update your own vehicles",
+          });
+        }
+
+        // Preserve important fields that shouldn't be overwritten
+        const updateDoc = {
+          $set: {
+            ...vehicleData,
+            updatedAt: new Date(),
+            // Ensure host information is preserved
+            host: existingVehicle.host,
+          },
+        };
+
+        const result = await vehiclesCollection.updateOne(filter, updateDoc);
+
+        if (result.matchedCount === 0) {
+          return res.status(404).send({ message: "Vehicle not found" });
+        }
+
+        if (result.modifiedCount === 1) {
+          console.log("Vehicle updated successfully");
+          // Return the updated vehicle
+          const updatedVehicle = await vehiclesCollection.findOne(filter);
+          res.send({
+            message: "Vehicle updated successfully",
+            vehicle: updatedVehicle,
+            modifiedCount: result.modifiedCount,
+          });
+        } else {
+          res.send({ message: "No changes made to the vehicle" });
+        }
+      } catch (error) {
+        console.error("Error updating vehicle:", error);
+        res
+          .status(500)
+          .send({ message: "Internal server error while updating vehicle" });
+      }
+    });
 
     // Update A Vehicle
-    app.put("/vehicles/:id", verifyToken, async (req, res) => {
-      const vehicle = req.body;
-      console.log(vehicle);
+    // app.put("/vehicles/:id", verifyToken, async (req, res) => {
+    //   const vehicle = req.body;
+    //   console.log(vehicle);
 
-      const filter = { _id: new ObjectId(req.params.id) };
-      const options = { upsert: true };
-      const updateDoc = {
-        $set: vehicle,
-      };
-      const result = await vehiclesCollection.updateOne(
-        filter,
-        updateDoc,
-        options
-      );
-      res.send(result);
-    });
+    //   const filter = { _id: new ObjectId(req.params.id) };
+    //   const options = { upsert: true };
+    //   const updateDoc = {
+    //     $set: vehicle,
+    //   };
+    //   const result = await vehiclesCollection.updateOne(
+    //     filter,
+    //     updateDoc,
+    //     options
+    //   );
+    //   res.send(result);
+    // });
 
-    // delete a vehicle
-    app.delete("/vehicles/:id", verifyToken, async (req, res) => {
-      const id = req.params.id;
-      const query = { _id: new ObjectId(id) };
-      const result = await vehiclesCollection.deleteOne(query);
-      res.send(result);
-    });
+    // // delete a vehicle
+    // app.delete("/vehicles/:id", verifyToken, async (req, res) => {
+    //   const id = req.params.id;
+    //   const query = { _id: new ObjectId(id) };
+    //   const result = await vehiclesCollection.deleteOne(query);
+    //   res.send(result);
+    // });
 
     // ****Payment Intent****
     // Generating Payment Secret for stripe
