@@ -276,6 +276,47 @@ async function run() {
       }
     });
 
+    //search functionality
+    // Search Vehicles by location, category, and price range
+    app.get("/vehicles/search", async (req, res) => {
+      try {
+        const { location, category, min, max } = req.query;
+
+        const filter = {};
+
+        // Location filter (case-insensitive, partial match)
+        if (location) {
+          filter.location = { $regex: location, $options: "i" };
+        }
+
+        // Category filter
+        if (category && category !== "all") {
+          filter.category = category;
+        }
+
+        // Price range filter
+        if (min || max) {
+          filter.price = {};
+          if (min) filter.price.$gte = Number(min);
+          if (max) filter.price.$lte = Number(max);
+        }
+
+        const results = await vehiclesCollection
+          .find(filter)
+          .limit(100)
+          .toArray();
+
+        res.send({
+          message: "Search results fetched successfully",
+          data: results,
+          count: results.length,
+        });
+      } catch (error) {
+        console.error("Error searching vehicles:", error);
+        res.status(500).send({ message: "Internal server error" });
+      }
+    });
+
     // Get vehicles for host
     app.get("/vehicles/host/:email", verifyToken, async (req, res) => {
       try {
