@@ -39,7 +39,7 @@ const validateVehicleData = (vehicle) => {
 const corsOptions = {
   origin: ["http://localhost:5173", "http://localhost:5174"],
   credentials: true,
-  optionSuccessStatus: 200,
+  optionsSuccessStatus: 200,
 };
 app.use(cors(corsOptions));
 app.use(express.json({ limit: "10mb" }));
@@ -254,6 +254,32 @@ async function run() {
     });
 
     // Get All Vehicles with optional category filtering
+    // app.get("/vehicles", async (req, res) => {
+    //   try {
+    //     const { category } = req.query;
+    //     let query = {};
+
+    //     // Add category filter if provided
+    //     if (category && category !== "all") {
+    //       query.category = category;
+    //     }
+
+    //     const result = await vehiclesCollection
+    //       .find(query)
+    //       .sort({ createdAt: -1 }) // newest first
+    //       .toArray();
+
+    //     res.send({
+    //       message: "Vehicles fetched successfully",
+    //       data: result,
+    //       count: result.length,
+    //     });
+    //   } catch (error) {
+    //     console.error("Error fetching vehicles:", error);
+    //     res.status(500).send({ message: "Error fetching vehicles" });
+    //   }
+    // });
+    // Get All Vehicles with optional category filtering
     app.get("/vehicles", async (req, res) => {
       try {
         const { category } = req.query;
@@ -264,7 +290,12 @@ async function run() {
           query.category = category;
         }
 
-        const result = await vehiclesCollection.find(query).toArray();
+        // ✅ Add sorting here
+        const result = await vehiclesCollection
+          .find(query)
+          .sort({ createdAt: -1 }) // <-- NEWEST first
+          .toArray();
+
         res.send({
           message: "Vehicles fetched successfully",
           data: result,
@@ -342,6 +373,36 @@ async function run() {
     });
 
     // Get Single Vehicle
+    // app.get("/vehicle/:id", async (req, res) => {
+    //   try {
+    //     const id = req.params.id;
+    //     if (!ObjectId.isValid(id)) {
+    //       return res.status(400).send({ message: "Invalid vehicle ID format" });
+    //     }
+
+    //     const result = await vehiclesCollection.findOne({
+    //       _id: new ObjectId(id),
+    //     });
+
+    //     if (!result) {
+    //       return res.status(404).send({ message: "Vehicle not found" });
+    //     }
+
+    //     // soldOut check
+    //     if (result.bookedDates && result.totalAvailableDays) {
+    //       result.soldOut =
+    //         result.bookedDates.length >= result.totalAvailableDays;
+    //     } else {
+    //       result.soldOut = false;
+    //     }
+
+    //     res.send(result);
+    //   } catch (error) {
+    //     console.error("Error fetching vehicle:", error);
+    //     res.status(500).send({ message: "Error fetching vehicle" });
+    //   }
+    // });
+    // Get Single Vehicle
     app.get("/vehicle/:id", async (req, res) => {
       try {
         const id = req.params.id;
@@ -357,6 +418,14 @@ async function run() {
           return res.status(404).send({ message: "Vehicle not found" });
         }
 
+        // Check if sold out
+        if (result.bookedDates && result.totalAvailableDays) {
+          result.soldOut =
+            result.bookedDates.length >= result.totalAvailableDays;
+        } else {
+          result.soldOut = false;
+        }
+
         res.send(result);
       } catch (error) {
         console.error("Error fetching vehicle:", error);
@@ -365,6 +434,32 @@ async function run() {
     });
 
     // Save vehicle in the database
+    // app.post("/vehicles", verifyToken, async (req, res) => {
+    //   try {
+    //     const vehicle = req.body;
+
+    //     const validationError = validateVehicleData(vehicle);
+    //     if (validationError) {
+    //       return res.status(400).send({ message: validationError });
+    //     }
+
+    //     const vehicleWithTimestamp = {
+    //       ...vehicle,
+    //       createdAt: new Date(),
+    //       updatedAt: new Date(),
+    //     };
+
+    //     const result = await vehiclesCollection.insertOne(vehicleWithTimestamp);
+    //     res.send({
+    //       message: "Vehicle created successfully",
+    //       insertedId: result.insertedId,
+    //     });
+    //   } catch (error) {
+    //     console.error("Error creating vehicle:", error);
+    //     res.status(500).send({ message: "Error creating vehicle" });
+    //   }
+    // });
+    // Replace your current POST /vehicles endpoint
     app.post("/vehicles", verifyToken, async (req, res) => {
       try {
         const vehicle = req.body;
@@ -378,6 +473,9 @@ async function run() {
           ...vehicle,
           createdAt: new Date(),
           updatedAt: new Date(),
+          bookedDates: [], // Initialize empty array
+          soldOut: false, // Default to not sold out
+          status: "active", // active, inactive, sold_out
         };
 
         const result = await vehiclesCollection.insertOne(vehicleWithTimestamp);
@@ -524,16 +622,222 @@ async function run() {
       }
     });
 
+    // Get all bookings for admin
+    app.get("/bookings/admin", verifyToken, verifyAdmin, async (req, res) => {
+      try {
+        const result = await bookingsCollection.find().toArray();
+        res.send({
+          message: "All bookings fetched successfully",
+          data: result,
+          count: result.length,
+        });
+      } catch (error) {
+        console.error("Error fetching all bookings (admin):", error);
+        res.status(500).send({ message: "Error fetching bookings" });
+      }
+    });
+
+    // Update a booking (admin only)
+    app.put("/bookings/:id", verifyToken, verifyAdmin, async (req, res) => {
+      try {
+        const id = req.params.id;
+        const bookingData = req.body;
+
+        if (!ObjectId.isValid(id)) {
+          return res.status(400).send({ message: "Invalid booking ID format" });
+        }
+
+        const filter = { _id: new ObjectId(id) };
+        const updateDoc = {
+          $set: {
+            ...bookingData,
+            updatedAt: new Date(),
+          },
+        };
+
+        const result = await bookingsCollection.updateOne(filter, updateDoc);
+
+        if (result.matchedCount === 0) {
+          return res.status(404).send({ message: "Booking not found" });
+        }
+
+        res.send({
+          message: "Booking updated successfully",
+          modifiedCount: result.modifiedCount,
+        });
+      } catch (error) {
+        console.error("Booking update error:", error);
+        res.status(500).send({ message: "Error updating booking" });
+      }
+    });
+
     // Save Booking Info in Booking Collection
+    // app.post("/bookings", verifyToken, async (req, res) => {
+    //   try {
+    //     const booking = req.body;
+
+    //     // Validate required booking fields
+    //     if (!booking.guest?.email || !booking.host || !booking.transactionId) {
+    //       return res
+    //         .status(400)
+    //         .send({ message: "Missing required booking information" });
+    //     }
+
+    //     const bookingWithTimestamp = {
+    //       ...booking,
+    //       createdAt: new Date(),
+    //       status: "confirmed",
+    //     };
+
+    //     const result = await bookingsCollection.insertOne(bookingWithTimestamp);
+
+    //     if (result.insertedId) {
+    //       // Send Email To the User
+    //       const sendEmail = (emailAddress, emailData) => {
+    //         const transporter = nodemailer.createTransport({
+    //           service: "gmail",
+    //           host: "smtp.gmail.com",
+    //           port: 587,
+    //           secure: false,
+    //           auth: {
+    //             user: process.env.USER,
+    //             pass: process.env.PASS,
+    //           },
+    //         });
+
+    //         transporter.verify((error, success) => {
+    //           if (error) {
+    //             console.log("Transporter error:", error);
+    //           } else {
+    //             console.log("Server is ready to take our emails");
+    //           }
+    //         });
+
+    //         const mailBody = {
+    //           from: process.env.USER,
+    //           to: emailAddress,
+    //           subject: emailData?.subject,
+    //           html: `<p>${emailData?.message}</p>`,
+    //         };
+
+    //         transporter.sendMail(mailBody, (error, info) => {
+    //           if (error) {
+    //             console.log("Email send error:", error);
+    //           } else {
+    //             console.log("Email sent: " + info.response);
+    //           }
+    //         });
+    //       };
+
+    //       // Send Email to guest
+    //       // sendEmail(booking.guest.email, {
+    //       //   subject: "Booking Successful!",
+    //       //   message: `Vehicle Ready, get your vehicle from store, Your Transaction Id: ${booking.transactionId}`,
+    //       // });
+
+    //       // Send Email to Host
+    //       // sendEmail(booking.host, {
+    //       //   subject: "Your Vehicle got booked!",
+    //       //   message: `Deliver you vehicle to the store. ${booking.guest.name} is on the way.....`,
+    //       // });
+    //     }
+
+    //     res.send({
+    //       message: "Booking created successfully",
+    //       insertedId: result.insertedId,
+    //     });
+    //   } catch (error) {
+    //     console.error("Booking creation error:", error);
+    //     res.status(500).send({ message: "Error creating booking" });
+    //   }
+    // });
+    // app.post("/bookings", verifyToken, async (req, res) => {
+    //   try {
+    //     const booking = req.body;
+
+    //     if (
+    //       !booking.guest?.email ||
+    //       !booking.host ||
+    //       !booking.transactionId ||
+    //       !booking.dates
+    //     ) {
+    //       return res
+    //         .status(400)
+    //         .send({ message: "Missing required booking information" });
+    //     }
+
+    //     const bookingWithTimestamp = {
+    //       ...booking,
+    //       createdAt: new Date(),
+    //       status: "confirmed",
+    //     };
+
+    //     const result = await bookingsCollection.insertOne(bookingWithTimestamp);
+
+    //     if (result.insertedId) {
+    //       // Update vehicle with booked dates
+    //       await vehiclesCollection.updateOne(
+    //         { _id: new ObjectId(booking.vehicleId) },
+    //         {
+    //           $addToSet: { bookedDates: { $each: booking.dates } }, // prevent duplicates
+    //           $set: { updatedAt: new Date() },
+    //         }
+    //       );
+    //     }
+
+    //     res.send({
+    //       message: "Booking created successfully",
+    //       insertedId: result.insertedId,
+    //     });
+    //   } catch (error) {
+    //     console.error("Booking creation error:", error);
+    //     res.status(500).send({ message: "Error creating booking" });
+    //   }
+    // });
+    // Replace your current POST /bookings endpoint
     app.post("/bookings", verifyToken, async (req, res) => {
       try {
         const booking = req.body;
 
-        // Validate required booking fields
-        if (!booking.guest?.email || !booking.host || !booking.transactionId) {
+        if (
+          !booking.guest?.email ||
+          !booking.host ||
+          !booking.transactionId ||
+          !booking.dates
+        ) {
           return res
             .status(400)
             .send({ message: "Missing required booking information" });
+        }
+
+        // Check if vehicle exists and is available
+        const vehicle = await vehiclesCollection.findOne({
+          _id: new ObjectId(booking.vehicleId),
+        });
+
+        if (!vehicle) {
+          return res.status(404).send({ message: "Vehicle not found" });
+        }
+
+        if (vehicle.soldOut) {
+          return res.status(400).send({ message: "Vehicle is sold out" });
+        }
+
+        // Check for date conflicts
+        const existingBookedDates = vehicle.bookedDates || [];
+        const requestedDates = booking.dates;
+
+        const hasConflict = requestedDates.some((date) =>
+          existingBookedDates.includes(date)
+        );
+
+        if (hasConflict) {
+          return res.status(400).send({
+            message: "Some dates are already booked",
+            conflictingDates: requestedDates.filter((date) =>
+              existingBookedDates.includes(date)
+            ),
+          });
         }
 
         const bookingWithTimestamp = {
@@ -545,17 +849,35 @@ async function run() {
         const result = await bookingsCollection.insertOne(bookingWithTimestamp);
 
         if (result.insertedId) {
-          // Send Email to guest
-          sendEmail(booking.guest.email, {
-            subject: "Booking Successful!",
-            message: `Vehicle Ready, get your vehicle from store, Your Transaction Id: ${booking.transactionId}`,
+          // Update vehicle with booked dates
+          await vehiclesCollection.updateOne(
+            { _id: new ObjectId(booking.vehicleId) },
+            {
+              $addToSet: { bookedDates: { $each: booking.dates } },
+              $set: { updatedAt: new Date() },
+            }
+          );
+
+          // Check if vehicle should be marked as sold out
+          const updatedVehicle = await vehiclesCollection.findOne({
+            _id: new ObjectId(booking.vehicleId),
           });
 
-          // Send Email to Host
-          sendEmail(booking.host, {
-            subject: "Your Vehicle got booked!",
-            message: `Deliver you vehicle to the store. ${booking.guest.name} is on the way.....`,
-          });
+          const totalBookedDates = (updatedVehicle.bookedDates || []).length;
+
+          // Mark as sold out if more than 60 days are booked (customize this)
+          if (totalBookedDates > 60) {
+            await vehiclesCollection.updateOne(
+              { _id: new ObjectId(booking.vehicleId) },
+              {
+                $set: {
+                  soldOut: true,
+                  status: "sold_out",
+                  updatedAt: new Date(),
+                },
+              }
+            );
+          }
         }
 
         res.send({
@@ -568,6 +890,41 @@ async function run() {
       }
     });
 
+    // Add this new endpoint
+    app.patch("/vehicles/:id/sold-out", verifyToken, async (req, res) => {
+      try {
+        const { id } = req.params;
+        const { soldOut } = req.body;
+
+        if (!ObjectId.isValid(id)) {
+          return res.status(400).send({ message: "Invalid vehicle ID format" });
+        }
+
+        const result = await vehiclesCollection.updateOne(
+          { _id: new ObjectId(id) },
+          {
+            $set: {
+              soldOut: Boolean(soldOut),
+              status: Boolean(soldOut) ? "sold_out" : "active",
+              updatedAt: new Date(),
+            },
+          }
+        );
+
+        if (result.matchedCount === 0) {
+          return res.status(404).send({ message: "Vehicle not found" });
+        }
+
+        res.send({
+          message: `Vehicle ${
+            soldOut ? "marked as sold out" : "marked as available"
+          }`,
+        });
+      } catch (error) {
+        console.error("Error updating vehicle status:", error);
+        res.status(500).send({ message: "Error updating vehicle status" });
+      }
+    });
     // Update Vehicle Booking Status
     app.patch("/vehicles/status/:id", async (req, res) => {
       try {
@@ -829,6 +1186,35 @@ async function run() {
         res.status(500).send({ message: "Error fetching users" });
       }
     });
+    // Run this once to update existing vehicles
+    app.post(
+      "/update-existing-vehicles",
+      verifyToken,
+      verifyAdmin,
+      async (req, res) => {
+        try {
+          const result = await vehiclesCollection.updateMany(
+            { bookedDates: { $exists: false } }, // Vehicles without bookedDates
+            {
+              $set: {
+                bookedDates: [],
+                soldOut: false,
+                status: "active",
+                updatedAt: new Date(),
+              },
+            }
+          );
+
+          res.send({
+            message: "Existing vehicles updated successfully",
+            modifiedCount: result.modifiedCount,
+          });
+        } catch (error) {
+          console.error("Error updating existing vehicles:", error);
+          res.status(500).send({ message: "Error updating vehicles" });
+        }
+      }
+    );
 
     // Update user Role for admin
     app.put(
