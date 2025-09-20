@@ -37,10 +37,15 @@ const validateVehicleData = (vehicle) => {
 
 /* ------------------ middleware ------------------ */
 const corsOptions = {
-  origin: ["http://localhost:5173", "http://localhost:5174"],
+  origin: [
+    "http://localhost:5173",
+    "https://vehi-quest-171.web.app",
+    "https://vehiquest-rentals-server.vercel.app",
+  ],
   credentials: true,
   optionsSuccessStatus: 200,
 };
+
 app.use(cors(corsOptions));
 app.use(express.json({ limit: "10mb" }));
 app.use(cookieParser());
@@ -122,24 +127,6 @@ async function run() {
     const vehiclesCollection = client.db("vehiQuest").collection("vehicles");
     const bookingsCollection = client.db("vehiQuest").collection("bookings");
 
-    /**
-     * The provided code includes various middleware functions, API endpoints for user, booking, vehicle,
-     * admin operations, statistics retrieval, and payment intent creation.
-     * @param req - - Represents the request object, which contains information about the HTTP request such
-     * as headers, body, parameters, etc.
-     * @param res - The `res` parameter in the code snippets refers to the response object in Express.js.
-     * It is used to send a response back to the client making the HTTP request. The response object has
-     * methods like `res.send()`, `res.status()`, `res.json()`, etc., which are used
-     * @param next - The code you provided includes middleware functions for role verification,
-     * authentication-related APIs, user-related endpoints, booking-related endpoints, vehicle-related
-     * endpoints, admin-related endpoints, statistics endpoints, and a payment intent endpoint for
-     * generating payment secrets using Stripe.
-     * @returns The code provided includes various middleware functions for role verification (admin,
-     * host), authentication-related APIs (JWT creation, logout), user-related APIs (update user, fetch
-     * user), bookings-related APIs (create booking, fetch bookings), vehicle-related APIs (fetch vehicles,
-     * search vehicles, update vehicle), admin-related APIs (fetch admin vehicles, update admin vehicle),
-     * statistics-related APIs (admin stats, host stats, guest
-     */
     /* ------------------ Role Verification MiddleWares ------------------ */
     // For Admin
     const verifyAdmin = async (req, res, next) => {
@@ -228,7 +215,7 @@ async function run() {
         const query = { email: email };
         const options = { upsert: true };
         const isExist = await usersCollection.findOne(query);
-        console.log("User found?----->", isExist);
+        // console.log("User found?----->", isExist);
 
         if (isExist) {
           if (user?.status === "Requested") {
@@ -568,6 +555,29 @@ async function run() {
     });
 
     // Get vehicles for host
+    // app.get("/vehicles/host/:email", verifyToken, async (req, res) => {
+    //   try {
+    //     const email = req.params.email;
+    //     if (!isValidEmail(email)) {
+    //       return res.status(400).send({ message: "Invalid email format" });
+    //     }
+
+    //     // console.log("Fetching vehicles for host:", email);
+    //     const result = await vehiclesCollection
+    //       .find({ "host.email": email })
+    //       .toArray();
+    //     // console.log("Found vehicles:", result.length);
+    //     res.send({
+    //       message: "Host vehicles fetched successfully",
+    //       data: result,
+    //       count: result.length,
+    //     });
+    //   } catch (error) {
+    //     console.error("Error fetching host vehicles:", error);
+    //     res.status(500).send({ message: "Error fetching vehicles" });
+    //   }
+    // });
+    // Get vehicles for host (including pending ones)
     app.get("/vehicles/host/:email", verifyToken, async (req, res) => {
       try {
         const email = req.params.email;
@@ -575,11 +585,17 @@ async function run() {
           return res.status(400).send({ message: "Invalid email format" });
         }
 
-        console.log("Fetching vehicles for host:", email);
+        // Include all vehicles for the host (active, pending, sold_out) but exclude deleted ones
+        const query = {
+          "host.email": email,
+          isDeleted: { $ne: true },
+        };
+
         const result = await vehiclesCollection
-          .find({ "host.email": email })
+          .find(query)
+          .sort({ createdAt: -1 }) // Newest first
           .toArray();
-        console.log("Found vehicles:", result.length);
+
         res.send({
           message: "Host vehicles fetched successfully",
           data: result,
@@ -686,7 +702,7 @@ async function run() {
     app.delete("/vehicles/:id", verifyToken, async (req, res) => {
       try {
         const id = req.params.id;
-        console.log("Deleting vehicle with ID:", id);
+        // console.log("Deleting vehicle with ID:", id);
 
         if (!ObjectId.isValid(id)) {
           return res.status(400).send({ message: "Invalid vehicle ID format" });
@@ -710,7 +726,7 @@ async function run() {
         const result = await vehiclesCollection.deleteOne(query);
 
         if (result.deletedCount === 1) {
-          console.log("Vehicle deleted successfully");
+          // console.log("Vehicle deleted successfully");
           res.send({
             message: "Vehicle deleted successfully",
             deletedCount: result.deletedCount,
@@ -731,7 +747,7 @@ async function run() {
       try {
         const id = req.params.id;
         const vehicleData = req.body;
-        console.log("Updating vehicle with ID:", id);
+        // console.log("Updating vehicle with ID:", id);
 
         if (!ObjectId.isValid(id)) {
           return res.status(400).send({ message: "Invalid vehicle ID format" });
@@ -767,7 +783,7 @@ async function run() {
         }
 
         if (result.modifiedCount === 1) {
-          console.log("Vehicle updated successfully");
+          // console.log("Vehicle updated successfully");
           const updatedVehicle = await vehiclesCollection.findOne(filter);
           res.send({
             message: "Vehicle updated successfully",
@@ -1551,10 +1567,10 @@ async function run() {
     });
 
     // Send a ping to confirm a successful connection
-    await client.db("admin").command({ ping: 1 });
-    console.log(
-      "Pinged your deployment. You successfully connected to MongoDB!"
-    );
+    // await client.db("admin").command({ ping: 1 });
+    // console.log(
+    //   "Pinged your deployment. You successfully connected to MongoDB!"
+    // );
   } finally {
     // Connection will be maintained for the application lifecycle
   }
